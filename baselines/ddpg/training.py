@@ -14,7 +14,7 @@ from mpi4py import MPI
 
 def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, param_noise, actor, critic,
     normalize_returns, normalize_observations, critic_l2_reg, actor_lr, critic_lr, action_noise,
-    popart, gamma, clip_norm, nb_train_steps, nb_rollout_steps, nb_eval_steps, batch_size, memory,
+    popart, gamma, clip_norm, nb_train_steps, nb_rollout_steps, nb_eval_steps, batch_size, memory, reward_filename,
     tau=0.01, eval_env=None, param_noise_adaption_interval=50):
     rank = MPI.COMM_WORLD.Get_rank()
 
@@ -39,6 +39,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
     episode = 0
     eval_episode_rewards_history = deque(maxlen=100)
     episode_rewards_history = deque(maxlen=100)
+    episode_rewards_history_mean = []
     with U.single_threaded_session() as sess:
         # Prepare everything.
         agent.initialize(sess)
@@ -94,6 +95,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                         # Episode done.
                         epoch_episode_rewards.append(episode_reward)
                         episode_rewards_history.append(episode_reward)
+                        episode_rewards_history_mean.append(np.mean(episode_rewards_history))
                         epoch_episode_steps.append(episode_step)
                         episode_reward = 0.
                         episode_step = 0
@@ -189,3 +191,8 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                 if eval_env and hasattr(eval_env, 'get_state'):
                     with open(os.path.join(logdir, 'eval_env_state.pkl'), 'wb') as f:
                         pickle.dump(eval_env.get_state(), f)
+        #save the episode rewards into a csv file for plotting
+        np.savetxt(reward_filename, np.asarray(epoch_episode_rewards), delimiter=",")
+        reward_filename_history = 'history_'+reward_filename
+        np.savetxt(reward_filename_history, np.asarray(episode_rewards_history_mean), delimiter=",")
+

@@ -16,7 +16,7 @@ import gym
 import tensorflow as tf
 from mpi4py import MPI
 
-def run(env_id, seed, noise_type, layer_norm, evaluation, **kwargs):
+def run(env_id, seed, noise_type, layer_norm, evaluation, share_top_layer, **kwargs):
     # Configure things.
     rank = MPI.COMM_WORLD.Get_rank()
     if rank != 0:
@@ -55,8 +55,8 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, **kwargs):
 
     # Configure components.
     memory = Memory(limit=int(1e6), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
-    critic = Critic(layer_norm=layer_norm)
-    actor = Actor(nb_actions, layer_norm=layer_norm)
+    critic = Critic(layer_norm=layer_norm, share_top_layer=share_top_layer)
+    actor = Actor(nb_actions, layer_norm=layer_norm, share_top_layer=share_top_layer)
 
     # Seed everything to make things reproducible.
     seed = seed + 1000000 * rank
@@ -70,8 +70,12 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, **kwargs):
     # Disable logging for rank != 0 to avoid noise.
     if rank == 0:
         start_time = time.time()
+    if share_top_layer:
+        reward_filename = 'episode_reward_share_top_layer.csv'
+    else:
+        reward_filename = 'episode_reward_normal.csv'
     training.train(env=env, eval_env=eval_env, param_noise=param_noise,
-        action_noise=action_noise, actor=actor, critic=critic, memory=memory, **kwargs)
+        action_noise=action_noise, actor=actor, critic=critic, memory=memory, reward_filename=reward_filename, **kwargs)
     env.close()
     if eval_env is not None:
         eval_env.close()
@@ -86,6 +90,7 @@ def parse_args():
     boolean_flag(parser, 'render-eval', default=False)
     boolean_flag(parser, 'layer-norm', default=True)
     boolean_flag(parser, 'render', default=False)
+    boolean_flag(parser, 'share_top_layer', default=False)
     boolean_flag(parser, 'normalize-returns', default=False)
     boolean_flag(parser, 'normalize-observations', default=True)
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
